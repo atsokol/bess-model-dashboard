@@ -6,6 +6,10 @@ toc: false
   <h1>Ukraine BESS revenue model</h1>
 </div>
 
+
+
+---
+
 <div class="grid grid-cols-2" style="grid-auto-rows: 504px;">
   <div class="card">${
     resize((width) => Plot.plot({

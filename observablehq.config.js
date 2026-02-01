@@ -18,7 +18,14 @@ export default {
   // ],
 
   // Content to add to the head of the page, e.g. for a favicon:
-  head: '<link rel="icon" href="observable.png" type="image/png" sizes="32x32">',
+  head: '<link rel="icon" href="observable.png" type="image/png" sizes="32x32">\n<link rel="stylesheet" href="/styles.css">',
+
+  // Header with controls placeholder
+  header: `<div style="background: var(--theme-background-alt); border-bottom: 1px solid var(--theme-foreground-faintest); padding: 0.5rem 1rem;">
+    <div style="max-width: 1152px; margin: 0 auto;">
+      <small style="color: var(--theme-foreground-muted);">💡 Use the controls at the top of each page to adjust aFRR quality and charging parameters</small>
+    </div>
+  </div>`,
 
   // The path to the source root.
   root: "src",

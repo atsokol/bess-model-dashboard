@@ -1,0 +1,4 @@
+/* Global chart font size for Observable Plot and D3 charts */
+.plot text, svg text {
+  font-size: 14px;
+}

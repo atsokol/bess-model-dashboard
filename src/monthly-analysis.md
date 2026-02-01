@@ -1,33 +1,55 @@
 # Monthly Flow Analysis
 
+```js
+import {createSharedInputs, InputsHeader} from "./components/shared-inputs.js";
+import {filterHourlySchedules} from "./components/shared-data.js";
+```
+
+```js
+// Create shared inputs
+const inputs = createSharedInputs();
+```
+
+${InputsHeader(inputs)}
+
+```js
+const qaFRR = view(inputs.qaFRR);
+const chargeHours = view(inputs.chargeHours);
+const dischargeHours = view(inputs.dischargeHours);
+```
+
 ## Load Data
 
 ```js
-const schedule_opt = await FileAttachment("data/optimized_schedule.csv").csv({typed: true});
-
-const optimized = schedule_opt.map(d => {
-  const datetime = new Date(d.date);
-  datetime.setHours(d.hour, 0, 0, 0);
-  return {
-    trading_MW: +d.trading_MW || 0,
-    net_aFRR: +d.net_aFRR || 0,
-    restore_MW: +d.restore_MW || 0,
-    imbalance_MWh: +d.imbalance_MWh || 0,
-    datetime: datetime
-  };
-});
+// Load hourly schedules and filter for selected scenario
+const allHourly = await FileAttachment("data/all_scenarios_hourly_schedules.parquet").parquet();
+const schedules = filterHourlySchedules(allHourly, qaFRR, chargeHours, dischargeHours)
+  .map(d => {
+    const datetime = new Date(d.date);
+    datetime.setHours(d.hour, 0, 0, 0);
+    return {
+      trading_MW: +d.trading_MW || 0,
+      aFRR_charge: +d.aFRR_charge || 0,
+      aFRR_discharge: +d.aFRR_discharge || 0,
+      restore_MW: +d.restore_MW || 0,
+      imbalance_MWh: +d.imbalance_MWh || 0,
+      datetime: datetime,
+      dispatch_mode: d.dispatch_mode
+    };
+  });
 ```
 
 ## Monthly Charging/Discharging by Flow Type
 
 ```js
 // Aggregate data by month and flow type, separating charging and discharging
-const monthlyFlows = optimized.reduce((acc, d) => {
+const monthlyFlows = schedules.reduce((acc, d) => {
   const month = d3.utcMonth(d.datetime);
   
   const flows = [
     {type: "Trading", value: d.trading_MW},
-    {type: "Balancing", value: d.net_aFRR},
+    {type: "Balancing", value: d.aFRR_charge},
+    {type: "Balancing", value: -d.aFRR_discharge},
     {type: "Restoration", value: d.restore_MW}
   ];
   
@@ -59,6 +81,7 @@ const monthlyData = Object.values(monthlyFlows);
 Plot.plot({
   marginRight: 80,
   marginLeft: 80,
+  marginTop: 40,
   height: 600,
   width: 1000,
   marks: [
@@ -73,7 +96,7 @@ Plot.plot({
     Plot.ruleY([0])
   ],
   fx: {
-    label: "Month",
+    label: "",
     ticks: d3.utcMonth.every(3)
   },
   y: {
