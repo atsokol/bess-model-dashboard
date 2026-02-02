@@ -2,7 +2,6 @@
 
 ```js
 // Define inputs directly
-
 const qaFRR = view(Inputs.select([0.3, 0.4, 0.5, 0.6, 0.7], {
   label: "Share of capacity allocated to aFRR",
   value: 0.5,
@@ -20,61 +19,100 @@ const dischargeHours = view(Inputs.select([1, 2, 3, 4], {
 }));
 ```
 
+---
+
+## Monthly Energy Flow
+
 ```js
-// Load hourly schedules and filter for selected scenario
+// Load pre-aggregated monthly summaries
 
-const allHourly = await FileAttachment(
-  "data/all_scenarios_hourly_schedules.parquet",
-).parquet();
+const allMonthlyFlows = await FileAttachment("data/monthly-flow-summaries.json").json();
 
-const hourlyArray = allHourly.toArray();
+// Calculate fixed y-axis domain from ALL scenarios
 
-const schedules = hourlyArray.filter(d => 
-  d.Q_aFRR_pct === qaFRR &&
-  d.n_charge_hours === chargeHours && 
-  d.n_discharge_hours === dischargeHours)
-.map((d) => {
-  const datetime = new Date(d.date);
-  datetime.setHours(d.hour, 0, 0, 0);
-  return {
-    trading_MW: +d.trading_MW || 0,
-    aFRR_charge: +d.aFRR_charge || 0,
-    aFRR_discharge: +d.aFRR_discharge || 0,
-    restore_MW: +d.restore_MW || 0,
-    imbalance_MWh: +d.imbalance_MWh || 0,
-    SOC_end_MWh: +d.SOC_end_MWh || 0,
-    datetime: datetime,
-    dispatch_mode: d.dispatch_mode,
-  };
-});
+const maxTotal = d3.max(allMonthlyFlows, d => d.total);
+const monthlyYDomain = [0, maxTotal];
+
+// Filter for selected scenario
+
+const monthlyData = allMonthlyFlows
+  .filter(d => 
+    d.Q_aFRR_pct === qaFRR &&
+    d.n_charge_hours === chargeHours && 
+    d.n_discharge_hours === dischargeHours
+  )
+  .map(d => ({
+    ...d,
+    month: new Date(d.month)
+  }));
+
 ```
 
-Select the time period to display:
+### Monthly Charging/Discharging by Flow Type
 
 ```js
-const dateExtent = d3.extent(schedules, (d) => d.datetime);
-
-const startDate = view(
-  Inputs.date({
-    label: "Start Date",
-    value: new Date("2023-01-01"),
-  }),
-);
-
-const endDate = view(
-  Inputs.date({
-    label: "End Date",
-    value: new Date("2023-01-08"),
-  }),
-);
+Plot.plot({
+  marginRight: 80,
+  marginLeft: 80,
+  marginTop: 40,
+  height: 600,
+  width: 1000,
+  marks: [
+    Plot.barY(monthlyData, {
+      fx: "month",
+      y: "total",
+      fill: "direction",
+      x: "direction",
+      fy: "flowType",
+      tip: true
+    }),
+    Plot.ruleY([0])
+  ],
+  fx: {
+    label: "",
+    ticks: d3.utcMonth.every(3)
+  },
+  y: {
+    label: "MWh",
+    domain: monthlyYDomain,
+    grid: true
+  },
+  fy: {
+    label: ""
+  },
+  color: {
+    domain: ["Charging", "Discharging"],
+    range: ["#4CAF50", "#FF5722"],
+    legend: true
+  },
+  x : {
+    label: null,
+    tickFormat: () => "",
+    ticks: []
+  }
+})
 ```
 
-```js
-// Filter data based on selected date range
+---
 
-const schedules_filtered = schedules.filter(
-  (d) => d.datetime >= startDate && d.datetime <= endDate,
-);
+## Hourly Energy Flow
+
+**Note:** This section displays data for the first week of January 2023 (01.01.2023 - 08.01.2023) as a sample.
+
+```js
+// Load pre-filtered first week data (2023-01-01 to 2023-01-08)
+const allSchedules = await FileAttachment("data/energy-flow-first-week.json").json();
+
+const schedules_filtered = allSchedules
+  .filter(d => 
+    d.Q_aFRR_pct === qaFRR &&
+    d.n_charge_hours === chargeHours && 
+    d.n_discharge_hours === dischargeHours
+  )
+  .map(d => ({
+    ...d,
+    datetime: new Date(d.datetime)
+  }));
 
 // Transform to long format for domain calculation
 
@@ -130,15 +168,15 @@ const stackedTotals = d3.rollup(
 
 const allPositive = Array.from(stackedTotals.values()).map((d) => d.positive);
 const allNegative = Array.from(stackedTotals.values()).map((d) => d.negative);
-const yDomain = [Math.min(0, ...allNegative), Math.max(0, ...allPositive)];
+const hourlyYDomain = [Math.min(0, ...allNegative), Math.max(0, ...allPositive)];
 ```
 
-## State of Charge (SOC) Comparison
+### State of charge (SOC) by dispatch mode
 
 Battery energy capacity: 100 MWh
 
 ```js
-const p1 = Plot.plot({
+Plot.plot({
   marks: [
     // SOC lines by dispatch mode
     Plot.line(schedules_filtered, {
@@ -167,12 +205,10 @@ const p1 = Plot.plot({
   height: 500,
   marginLeft: 60,
   marginBottom: 40,
-});
-
-display(p1)
+})
 ```
 
-## Energy Flows Comparison
+### Energy flows by dispatch mode
 
 ```js
 const selectedFlowTypes = view(
@@ -182,8 +218,6 @@ const selectedFlowTypes = view(
   }),
 );
 ```
-
-### Energy Flows by Dispatch Mode
 
 ```js
 // Prepare data for stacked bar chart
@@ -223,14 +257,14 @@ const flows_stacked = schedules_filtered
   ])
   .filter((d) => selectedFlowTypes.includes(d.type));
 
-const extHours = d3.timeHour.count(startDate, endDate);
+const dateExtent = d3.extent(schedules_filtered, (d) => d.datetime);
+const extHours = d3.timeHour.count(dateExtent[0], dateExtent[1]);
 const hoursToDisplay =
   extHours / 24 <= 1 ? 3 : extHours / (24 * 7) <= 1 ? 12 : 24;
-
 ```
 
 ```js
-const p2 = Plot.plot({
+Plot.plot({
   marks: [
     Plot.barY(flows_stacked, {
       x: "datetime",
@@ -248,7 +282,7 @@ const p2 = Plot.plot({
   },
   y: {
     label: "Energy Flow (MWh)",
-    domain: yDomain,
+    domain: hourlyYDomain,
     grid: true,
   },
   fy: {
@@ -264,7 +298,5 @@ const p2 = Plot.plot({
   marginLeft: 60,
   marginRight: 70,
   marginBottom: 40,
-});
-
-display(p2)
+})
 ```

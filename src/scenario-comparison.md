@@ -54,7 +54,7 @@ const pctExtent = d3.extent(scenarioData, (d) => d.pctProvided);
 ```
 
 ```js
-const p1 = Plot.plot({
+Plot.plot({
     marks: [
       Plot.dot(scenarioData, {
         x: "pctProvided",
@@ -83,7 +83,6 @@ const p1 = Plot.plot({
     x: {
       label: "aFRR service provided (%)",
       domain: pctExtent,
-      grid: true,
       tickFormat: d3.format(".0%"),
     },
     y: {
@@ -112,9 +111,7 @@ const p1 = Plot.plot({
     height: 500,
     marginLeft: 100,
     marginBottom: 60,
-  });
-
-display(p1)
+  })
 ```
 
 
@@ -130,7 +127,7 @@ const tradingHoursExtent = d3.extent(scenarioData, (d) => d.totalTradingHours);
 ```
 
 ```js
-const p2 = Plot.plot({
+Plot.plot({
   marks: [
     Plot.dot(scenarioData, {
       x: "totalTradingHours",
@@ -152,15 +149,16 @@ const p2 = Plot.plot({
         Dispatch: "dispatch",
       },
     }),
-    Plot.ruleY([0])
+    Plot.ruleY([0], { stroke: "black", strokeDasharray: "4 4" }),
   ],
   x: {
     label: "Total trading hours (charge + discharge)",
     domain: [2,3,4,5,6,7],
   },
   y: {
-    label: "Restoration cost (EUR / MW)",
+    label: "Monthly restoration cost (EUR / MW)",
     domain: restorationExtent,
+    grid: true,
     ticks: 10
   },
   color: {
@@ -173,7 +171,5 @@ const p2 = Plot.plot({
   height: 500,
   marginLeft: 100,
   marginBottom: 60,
-});
-
-display(p2)
+})
 ```

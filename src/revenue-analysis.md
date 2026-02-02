@@ -105,6 +105,7 @@ const yearlyAggregated = d3.rollup(
   (d) => d.component,
 );
 ```
+
 ```js
 // Transform to flat array
 
@@ -142,7 +143,7 @@ for (const [year, models] of yearlyTotals) {
 ```
 
 ```js
-const p1 = Plot.plot({
+Plot.plot({
     marks: [
       Plot.barY(yearlyData, {
         x: "model",
@@ -204,14 +205,12 @@ const p1 = Plot.plot({
     caption:
       "Note: 2025 data is for 9 months. Annual total adjusted for comparison",
   })
-
-display(p1);
 ```
 
 ## Monthly revenues
 
 ```js
-const p2 =  Plot.plot({
+Plot.plot({
     marks: [
       Plot.line(scenarioMonthly, {
         x: "month",
@@ -242,14 +241,12 @@ const p2 =  Plot.plot({
     marginLeft: 80,
     marginBottom: 40,
   })
-
-display(p2)
 ```
 
 ## Hours aFRR service provided
 
 ```js
-const p3 =   Plot.plot({
+Plot.plot({
     marks: [
       Plot.line(scenarioMonthly, {
         x: "month",
@@ -279,8 +276,6 @@ const p3 =   Plot.plot({
     marginLeft: 80,
     marginBottom: 40,
   })
-
-display(p3)
 ```
 
 ## Monthly revenues breakdown by component
@@ -331,7 +326,7 @@ const filteredRevenueBreakdown = revenueBreakdown.filter((d) =>
 ```
 
 ```js
-const p4 = Plot.plot({
+Plot.plot({
   marginBottom: 40,
   marginRight: 70,
   marks: [
@@ -372,8 +367,5 @@ const p4 = Plot.plot({
   width: 1000,
   height: 800,
   marginLeft: 80,
-});
-
-display(p4);
-
+})
 ```
