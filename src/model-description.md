@@ -50,7 +50,7 @@ const minutesData = await FileAttachment("./data/minutes.csv").csv({typed: true}
 
 ```js
   // Convert minute data to fractional hours
-  
+
   const minuteDataProcessed = minutesData.map(d => ({
     ...d,
     hourFraction: (new Date(d.timestamp) - new Date("2024-01-12T00:00:00Z")) / 3600000
@@ -60,7 +60,7 @@ const minutesData = await FileAttachment("./data/minutes.csv").csv({typed: true}
 
 ```js
  Plot.plot({
-    title: "aFRR Energy Flow: minute to hourly conversion",
+    title: "aFRR Energy Flow: minute to hourly aggregation",
     width: 1000,
     height: 400,
     marginLeft: 60,

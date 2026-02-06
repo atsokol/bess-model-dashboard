@@ -1,7 +1,8 @@
 # Energy Flow Analysis
 
 ```js
-// Define inputs directly
+// Define inputs
+
 const qaFRR = view(Inputs.select([0.3, 0.4, 0.5, 0.6, 0.7], {
   label: "Share of capacity allocated to aFRR",
   value: 0.5,
@@ -27,6 +28,13 @@ const dischargeHours = view(Inputs.select([1, 2, 3, 4], {
 // Load pre-aggregated monthly summaries
 
 const allMonthlyFlows = await FileAttachment("data/monthly-flow-summaries.json").json();
+
+// Load monthly summaries for cycle analysis
+
+const allMonthly = await FileAttachment(
+  "data/combined_monthly_summaries.parquet",
+).parquet();
+const monthlyArray = allMonthly.toArray();
 
 // Calculate fixed y-axis domain from ALL scenarios
 
@@ -90,6 +98,114 @@ Plot.plot({
     tickFormat: () => "",
     ticks: []
   }
+})
+```
+
+---
+
+## Battery Cycle Analysis
+
+### Daily Cycles by Component
+
+```js
+// Filter cycle data for selected scenario and convert to daily cycles
+
+const cycleData = monthlyArray
+  .filter(d => 
+    d.Q_aFRR_pct === qaFRR &&
+    d.n_charge_hours === chargeHours && 
+    d.n_discharge_hours === dischargeHours
+  )
+  .map(d => {
+    const daysInMonth = +(d.hours_in_month || 720) / 24;
+    return {
+      month: new Date(d.month),
+      dispatch_mode: d.dispatch_mode,
+      balancing: +(d.balancing_cycles || 0) / daysInMonth,
+      controllable: +(d.controllable_cycles || 0) / daysInMonth,
+      total: +(d.total_cycles || 0) / daysInMonth
+    };
+  });
+
+// Prepare data for stacked bar chart by month
+
+const cycleBreakdown = cycleData.flatMap(d => [
+  { month: d.month, component: "Balancing", cycles: d.balancing, dispatch_mode: d.dispatch_mode },
+  { month: d.month, component: "Trading + Restoration", cycles: d.controllable, dispatch_mode: d.dispatch_mode }
+]);
+```
+
+```js
+Plot.plot({
+  marks: [
+    Plot.barY(cycleBreakdown, {
+      x: "month",
+      y: "cycles",
+      fill: "component",
+      fy: "dispatch_mode",
+      tip: true
+    }),
+    Plot.ruleY([0])
+  ],
+  x: {
+    label: "",
+    ticks: d3.utcMonth.every(3)
+  },
+  y: {
+    label: "Daily Cycles",
+    grid: true
+  },
+  fy: {
+    label: null
+  },
+  color: {
+    domain: ["Balancing", "Trading + Restoration"],
+    range: ["#17becf", "#1f77b4"],
+    legend: true
+  },
+  width: 1000,
+  height: 600,
+  marginLeft: 60,
+  marginRight: 70,
+  marginBottom: 40
+})
+```
+
+### Cycle Distribution
+
+```js
+// Prepare data for boxplot - only show Total cycles
+const dailyCyclesLong = cycleData.map(d => ({
+  cycles: d.total,
+  dispatch_mode: d.dispatch_mode
+}));
+```
+
+```js
+Plot.plot({
+  marks: [
+    Plot.boxY(dailyCyclesLong, {
+      x: "dispatch_mode",
+      y: "cycles",
+      fill: "dispatch_mode"
+    })
+  ],
+  x: {
+    label: ""
+  },
+  y: {
+    label: "Daily Cycles",
+    grid: true
+  },
+  color: {
+    domain: ["optimized", "reactive"],
+    range: ["#2ca02c", "#ff7f0e"],
+    legend: true
+  },
+  width: 300,
+  height: 300,
+  marginLeft: 60,
+  marginBottom: 50
 })
 ```
 

@@ -24,7 +24,7 @@ const dischargeHours = view(Inputs.select([1, 2, 3, 4], {
 // Load monthly data and filter for selected scenario
 
 const allMonthly = await FileAttachment(
-  "data/all_scenarios_monthly_summaries.parquet",
+  "data/combined_monthly_summaries.parquet",
 ).parquet();
 const monthlyArray = allMonthly.toArray();
 
@@ -40,11 +40,13 @@ const scenarioMonthly = monthlyArray
     dispatch_mode: d.dispatch_mode,
     model: d.dispatch_mode === "optimized" ? "Optimized" : "Reactive",
     total_revenue: +d.grand_total_eur_per_mw || 0,
+    net_revenue: +d.net_revenue_eur_per_mw || 0,
     aFRR: +d.aFRR_total_eur_per_mw || 0,
     balancing: +d.balancing_total_eur_per_mw || 0,
     IDM: +d.IDM_total_eur_per_mw || 0,
     trading: +d.trading_total_eur_per_mw || 0,
     imbalance: +d.imbalance_total_eur_per_mw || 0,
+    degradation: +d.degradation_cost_eur_per_mw || 0,
     hours_provided_pct: +d.hours_provided / +d.hours_in_month,
   }));
 
@@ -68,84 +70,85 @@ const revenueBreakdown = scenarioMonthly.flatMap((d) => [
   },
 ]);
 
+const netRevenueBreakdown = scenarioMonthly.flatMap((d) => [
+  { month: d.month, component: "aFRR", value: d.aFRR, model: d.model },
+  {
+    month: d.month,
+    component: "Balancing",
+    value: d.balancing,
+    model: d.model,
+  },
+  { month: d.month, component: "Restoration", value: d.IDM, model: d.model },
+  { month: d.month, component: "Trading", value: d.trading, model: d.model },
+  {
+    month: d.month,
+    component: "Imbalance",
+    value: d.imbalance,
+    model: d.model,
+  },
+  {
+    month: d.month,
+    component: "Degradation",
+    value: -d.degradation,
+    model: d.model,
+  },
+]);
+
 ```
 
-## Annual revenue breakdown
+## Annual gross revenue breakdown
 
 ```js
-// Calculate revenue by year, model, and component
-
-const yearlyRevenueBreakdown = revenueBreakdown.map((d) => ({
-  year: d.month.getFullYear(),
-  month: d.month,
-  model: d.model,
-  component: d.component,
-  value: d.value,
-}));
-
-// Count unique months per year
-
+// Calculate months per year for adjustment factor
 const monthsPerYear = d3.rollup(
-  yearlyRevenueBreakdown,
+  scenarioMonthly,
   (v) => new Set(v.map((d) => d.month.getTime())).size,
-  (d) => d.year,
+  (d) => d.month.getFullYear(),
 );
 
-const yearlyAggregated = d3.rollup(
-  yearlyRevenueBreakdown,
+// Aggregate gross revenue by year, model, and component with adjustment
+const yearlyGrossAggregated = d3.rollup(
+  revenueBreakdown,
   (v) => {
     const sum = d3.sum(v, (d) => d.value);
-    const year = v[0].year;
-    const monthsInYear = monthsPerYear.get(year) || 12;
-    const adjustmentFactor = 12 / monthsInYear;
+    const year = v[0].month.getFullYear();
+    const adjustmentFactor = 12 / (monthsPerYear.get(year) || 12);
     return sum * adjustmentFactor;
   },
-  (d) => d.year,
+  (d) => d.month.getFullYear(),
   (d) => d.model,
   (d) => d.component,
 );
-```
 
-```js
-// Transform to flat array
+// Flatten to array for plotting
+const yearlyGrossData = Array.from(yearlyGrossAggregated, ([year, models]) =>
+  Array.from(models, ([model, components]) =>
+    Array.from(components, ([component, value]) => ({
+      year,
+      model,
+      component,
+      value
+    }))
+  )
+).flat(2);
 
-const yearlyData = [];
-for (const [year, models] of yearlyAggregated) {
-  for (const [model, components] of models) {
-    for (const [component, value] of components) {
-      yearlyData.push({
-        year: year,
-        model: model,
-        component: component,
-        value: value,
-      });
-    }
-  }
-}
-```
-
-```js
 // Calculate totals for each year-model combination
-
-const yearlyTotals = d3.rollup(
-  yearlyData,
-  (v) => d3.sum(v, (d) => d.value),
-  (d) => d.year,
-  (d) => d.model,
-);
-
-const totalData = [];
-for (const [year, models] of yearlyTotals) {
-  for (const [model, total] of models) {
-    totalData.push({ year: year, model: model, total: total });
-  }
-}
+const totalGrossData = Array.from(
+  d3.rollup(
+    yearlyGrossData,
+    (v) => d3.sum(v, (d) => d.value),
+    (d) => d.year,
+    (d) => d.model,
+  ),
+  ([year, models]) =>
+    Array.from(models, ([model, total]) => ({ year, model, total }))
+).flat();
 ```
 
 ```js
 Plot.plot({
     marks: [
-      Plot.barY(yearlyData, {
+      Plot.barY(yearlyGrossData, {
         x: "model",
         y: "value",
         fill: "component",
@@ -160,7 +163,7 @@ Plot.plot({
           },
         },
       }),
-      Plot.dot(totalData, {
+      Plot.dot(totalGrossData, {
         x: "model",
         y: "total",
         fx: "year",
@@ -169,7 +172,7 @@ Plot.plot({
         strokeWidth: 2,
         r: 5,
       }),
-      Plot.text(totalData, {
+      Plot.text(totalGrossData, {
         x: "model",
         y: "total",
         fx: "year",
@@ -190,12 +193,122 @@ Plot.plot({
       tickFormat: (d) => d.toString(),
     },
     y: {
-      label: "Revenue (EUR)",
+      label: "Gross Revenue (EUR)",
       grid: true
     },
     color: {
       domain: ["aFRR", "Balancing", "Restoration", "Trading", "Imbalance"],
       range: ["#2ca02c", "#17becf", "#9467bd", "#1f77b4", "#ff7f0e"],
+      legend: true,
+    },
+    width: 1000,
+    height: 400,
+    marginLeft: 80,
+    marginBottom: 40,
+    caption:
+      "Note: 2025 data is for 9 months. Annual total adjusted for comparison",
+  })
+```
+
+## Annual net revenue breakdown
+
+```js
+// Aggregate net revenue by year, model, and component with adjustment
+
+const yearlyNetAggregated = d3.rollup(
+  netRevenueBreakdown,
+  (v) => {
+    const sum = d3.sum(v, (d) => d.value);
+    const year = v[0].month.getFullYear();
+    const adjustmentFactor = 12 / (monthsPerYear.get(year) || 12);
+    return sum * adjustmentFactor;
+  },
+  (d) => d.month.getFullYear(),
+  (d) => d.model,
+  (d) => d.component,
+);
+
+// Flatten to array for plotting
+
+const yearlyNetData = Array.from(yearlyNetAggregated, ([year, models]) =>
+  Array.from(models, ([model, components]) =>
+    Array.from(components, ([component, value]) => ({
+      year,
+      model,
+      component,
+      value
+    }))
+  )
+).flat(2);
+
+// Calculate totals for each year-model combination
+
+const totalNetData = Array.from(
+  d3.rollup(
+    yearlyNetData,
+    (v) => d3.sum(v, (d) => d.value),
+    (d) => d.year,
+    (d) => d.model,
+  ),
+  ([year, models]) =>
+    Array.from(models, ([model, total]) => ({ year, model, total }))
+).flat();
+```
+
+```js
+Plot.plot({
+    marks: [
+      Plot.barY(yearlyNetData, {
+        x: "model",
+        y: "value",
+        fill: "component",
+        fx: "year",
+        tip: {
+          format: {
+            y: d3.format(",.0f"),
+            fx: false,
+          },
+          channels: {
+            "Year:": (d) => String(d.year)
+          },
+        },
+      }),
+      Plot.dot(totalNetData, {
+        x: "model",
+        y: "total",
+        fx: "year",
+        fill: "white",
+        stroke: "black",
+        strokeWidth: 2,
+        r: 5,
+      }),
+      Plot.text(totalNetData, {
+        x: "model",
+        y: "total",
+        fx: "year",
+        text: (d) => `${(d.total / 1000).toFixed(0)}k`,
+        dy: 13,
+        fontSize: 11,
+        fontWeight: "bold",
+        fill: "white",
+      }),
+      Plot.ruleY([0]),
+    ],
+    x: {
+      label: "",
+      tickFormat: (d) => d.toString(),
+    },
+    fx: {
+      label: null,
+      tickFormat: (d) => d.toString(),
+    },
+    y: {
+      label: "Net Revenue (EUR)",
+      grid: true
+    },
+    color: {
+      domain: ["aFRR", "Balancing", "Restoration", "Trading", "Imbalance", "Degradation"],
+      range: ["#2ca02c", "#17becf", "#9467bd", "#1f77b4", "#ff7f0e", "#d62728"],
       legend: true,
     },
     width: 1000,

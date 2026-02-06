@@ -9,7 +9,7 @@ This chart compares all scenarios across different aFRR capacity allocations and
 // Load all monthly data
 
 const allMonthly = await FileAttachment(
-  "data/all_scenarios_monthly_summaries.parquet",
+  "data/combined_monthly_summaries.parquet",
 ).parquet();
 
 const monthlyArray = allMonthly.toArray();
@@ -22,7 +22,8 @@ const scenarioData = d3
   .flatRollup(
     monthlyArray,
     (v) => ({
-      avgRevenue: d3.mean(v, (d) => d.grand_total_eur_per_mw),
+      grossRevenue: d3.mean(v, (d) => d.grand_total_eur_per_mw),
+      netRevenue: d3.mean(v, (d) => d.net_revenue_eur_per_mw),
       pctProvided: d3.mean(v, (d) => +d.hours_provided / +d.hours_in_month),
       avgRestorationCost: d3.mean(v, (d) => d.IDM_total_eur_per_mw || 0),
     }),
@@ -38,7 +39,8 @@ const scenarioData = d3
     n_discharge,
     dispatch,
     scenario,
-    avgRevenue: dat.avgRevenue,
+    grossRevenue: dat.grossRevenue,
+    netRevenue: dat.netRevenue,
     pctProvided: dat.pctProvided,
     avgRestorationCost: dat.avgRestorationCost,
     totalTradingHours: n_charge + n_discharge,
@@ -49,33 +51,34 @@ const scenarioData = d3
 ```js
 // Calculate shared domain across both facets
 
-const revenueExtent = d3.extent(scenarioData, (d) => d.avgRevenue);
+const grossRevenueExtent = d3.extent(scenarioData, (d) => d.grossRevenue);
+const netRevenueExtent = d3.extent(scenarioData, (d) => d.netRevenue);
 const pctExtent = d3.extent(scenarioData, (d) => d.pctProvided);
 ```
 
+### Gross revenue by share of capacity allocated to aFRR
 ```js
 Plot.plot({
     marks: [
       Plot.dot(scenarioData, {
         x: "pctProvided",
-        y: "avgRevenue",
+        y: "grossRevenue",
         fx: "dispatch",
-        fill: "Q_aFRR",
-        fillOpacity: (d) => d.n_charge + d.n_discharge,
-        r: 5,
+        stroke: "Q_aFRR",
+        r: (d) => d.n_charge + d.n_discharge,
         tip: {
           format: {
             x: false,
             y: false,
             fill: false,
-            fillOpacity: false,
+            r: false,
             fx: false,
           },
         },
         channels: {
           "aFRR % capacity:": (d) => d3.format(".0%")(d.Q_aFRR),
           "Trading hours:": (d) => `C${d.n_charge}D${d.n_discharge}`,
-          Revenue: (d) => `€${d3.format(",.0f")(d.avgRevenue)}`,
+          Revenue: (d) => `€${d3.format(",.0f")(d.grossRevenue)}`,
           "% provided": (d) => d3.format(".1%")(d.pctProvided),
         },
       })
@@ -87,7 +90,66 @@ Plot.plot({
     },
     y: {
       label: "Monthly revenue (EUR / MW)",
-      domain: revenueExtent,
+      domain: grossRevenueExtent,
+      grid: true,
+      ticks: 10,
+    },
+    fx: {
+      label: null,
+    },
+    color: {
+      legend: true,
+      type: "categorical",
+      tickFormat: d3.format(".0%"),
+    },
+    r: {
+      domain: [2, 8],
+      range: [4, 8]
+    },
+    symbol: {legend: true},
+    width: 1000,
+    height: 500,
+    marginLeft: 100,
+    marginBottom: 60,
+    caption: "Size of circle is proportionate to total trading hours"
+  })
+```
+
+### Net revenue by share of capacity allocated to aFRR
+```js
+Plot.plot({
+    marks: [
+      Plot.dot(scenarioData, {
+        x: "pctProvided",
+        y: "netRevenue",
+        fx: "dispatch",
+        stroke: "Q_aFRR",
+        r: (d) => d.n_charge + d.n_discharge,
+        tip: {
+          format: {
+            x: false,
+            y: false,
+            fill: false,
+            r: false,
+            fx: false,
+          },
+        },
+        channels: {
+          "aFRR % capacity:": (d) => d3.format(".0%")(d.Q_aFRR),
+          "Trading hours:": (d) => `C${d.n_charge}D${d.n_discharge}`,
+          Revenue: (d) => `€${d3.format(",.0f")(d.netRevenue)}`,
+          "% provided": (d) => d3.format(".1%")(d.pctProvided),
+        },
+      })
+    ],
+    x: {
+      label: "aFRR service provided (%)",
+      domain: pctExtent,
+      tickFormat: d3.format(".0%"),
+    },
+    y: {
+      label: "Monthly revenue (EUR / MW)",
+      domain: netRevenueExtent,
       grid: true,
       ticks: 10,
     },
@@ -100,17 +162,16 @@ Plot.plot({
       type: "categorical",
       tickFormat: d3.format(".0%"),
     },
-    opacity: {
-      legend: true,
-      label: "Total trading hours (charge + discharge)",
-      reverse: true,
+    r: {
+      type: "sqrt",
       domain: [2, 8],
+      range: [4, 8]
     },
-
     width: 1000,
     height: 500,
     marginLeft: 100,
     marginBottom: 60,
+    caption: "Size of circle is proportionate to total trading hours"
   })
 ```
 
