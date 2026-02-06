@@ -1,4 +1,4 @@
-# Revenue Analysis
+# Revenues
 
 ```js
 // Define inputs directly

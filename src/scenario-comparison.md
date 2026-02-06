@@ -1,4 +1,4 @@
-# Scenario Comparison
+# Scenario Analysis
 
 
 ## Average Monthly Revenue vs aFRR Capacity Allocation

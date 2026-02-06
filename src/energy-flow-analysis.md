@@ -1,4 +1,4 @@
-# Energy Flow Analysis
+# Energy Flow
 
 ```js
 // Define inputs
