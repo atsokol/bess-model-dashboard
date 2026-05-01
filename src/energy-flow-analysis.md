@@ -18,6 +18,26 @@ const dischargeHours = view(Inputs.select([1, 2, 3, 4], {
   label: "Trading # discharge hours",
   value: 2
 }));
+
+// Generate all Mondays from 2023-01-02 through end of data (2025-09-29)
+const _mondays = [];
+const _md = new Date(Date.UTC(2023, 0, 2));
+const _dataEnd = new Date(Date.UTC(2025, 9, 1));
+while (_md < _dataEnd) {
+  _mondays.push(_md.toISOString().slice(0, 10));
+  _md.setUTCDate(_md.getUTCDate() + 7);
+}
+
+const weekStart = view(Inputs.select(_mondays, {
+  label: "Week starting",
+  value: "2023-01-02",
+  format: (iso) => {
+    const s = new Date(iso + "T00:00:00Z");
+    const e = new Date(Date.UTC(s.getUTCFullYear(), s.getUTCMonth(), s.getUTCDate() + 6));
+    const fmt = (d) => d.toLocaleDateString("en-GB", { month: "short", day: "numeric", timeZone: "UTC" });
+    return `${fmt(s)} – ${fmt(e)}`;
+  }
+}));
 ```
 
 ---
@@ -213,23 +233,60 @@ Plot.plot({
 
 ## Hourly Energy Flow
 
-**Note:** This section displays data for the first week of January 2023 (01.01.2023 - 08.01.2023) as a sample.
+```js
+import { DuckDBClient } from "npm:@observablehq/duckdb";
+const hourlyDb = await DuckDBClient.of({
+  hourly: FileAttachment("data/hourly_compact.parquet")
+});
+```
 
 ```js
-// Load pre-filtered first week data (2023-01-01 to 2023-01-08)
-const allSchedules = await FileAttachment("data/energy-flow-first-week.json").json();
+const weekEnd = (() => {
+  const d = new Date(weekStart + "T00:00:00Z");
+  d.setUTCDate(d.getUTCDate() + 6);
+  return d.toISOString().slice(0, 10);
+})();
 
-const schedules_filtered = allSchedules
-  .filter(d => 
-    d.Q_aFRR_pct === qaFRR &&
-    d.n_charge_hours === chargeHours && 
-    d.n_discharge_hours === dischargeHours
-  )
-  .map(d => ({
-    ...d,
-    datetime: new Date(d.datetime)
-  }));
+const schedules_filtered = (await hourlyDb.query(`
+  SELECT
+    trading_MW,
+    aFRR_charge,
+    aFRR_discharge,
+    restore_MW,
+    imbalance_MWh,
+    SOC_end_MWh,
+    dispatch_mode,
+    date,
+    hour
+  FROM hourly
+  WHERE Q_aFRR_pct = ${qaFRR}
+    AND n_charge_hours = ${chargeHours}
+    AND n_discharge_hours = ${dischargeHours}
+    AND date >= '${weekStart}'
+    AND date <= '${weekEnd}'
+  ORDER BY dispatch_mode, date, hour
+`)).toArray().map(d => ({
+  trading_MW: d.trading_MW,
+  aFRR_charge: d.aFRR_charge,
+  aFRR_discharge: d.aFRR_discharge,
+  restore_MW: d.restore_MW,
+  imbalance_MWh: d.imbalance_MWh,
+  SOC_end_MWh: d.SOC_end_MWh,
+  dispatch_mode: d.dispatch_mode,
+  datetime: new Date(d.date + "T" + String(d.hour).padStart(2, "0") + ":00:00Z")
+}));
+```
 
+```js
+const _s = new Date(weekStart + "T00:00:00Z");
+const _e = new Date(weekEnd + "T00:00:00Z");
+const _dfmt = (d) => d.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
+display(html`<p style="color: var(--theme-foreground-muted); margin-top: -1rem;">
+  Showing week of <strong>${_dfmt(_s)} – ${_dfmt(_e)}</strong>
+</p>`);
+```
+
+```js
 // Transform to long format for domain calculation
 
 const flowsBreakdown = schedules_filtered.flatMap((d) => [
