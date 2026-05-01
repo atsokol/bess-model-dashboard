@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "model_run": {
+    "run_id": "local-20260501-200831",
+    "run_url": null,
+    "triggered_at": "2026-05-01T20:08:31Z",
+    "model_sha": "local"
+  },
+  "data": {
+    "scenario_count": 157,
+    "date_range": {
+      "start": "2023-01-01",
+      "end": "2025-12-31"
+    }
+  },
+  "published_at": "2026-05-01T20:08:31Z"
+}
